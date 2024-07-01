@@ -1164,6 +1164,82 @@ evalREddy <- function(
 						find_dynlag(x[[i]],lag[,i])
 					},x=Covars,lag=dyn_lag)
 
+                    browser()
+
+					# covariance function's quality measures (an attempt)
+					# ------------------------------------------------------------------------
+                    par(mfrow = c(2, 2))
+                    for (x in covariances) {
+                        # x <- covariances[1]
+                        # x <- covariances[2]
+                        # x <- covariances[3]
+                        y <- Covars[[x]]
+                        tau <- dyn_lag_max[, x]
+                        peak <- tau[1]
+                        # estimate measures of quality
+                        # filter for weights
+                        bmnutall <- function(n) {
+                            N <- n * 2 - 1
+                            # BmNutall filter
+                            (0.3635819 - 
+                                0.4891775 * cos(2 * pi * seq.int(0, N) / N) + 
+                                0.1365995 * cos(4 * pi * seq.int(0, N) / N) - 
+                                0.0106411 * cos(6 * pi * seq.int(0, N) / N)
+                            )[n:1]
+                        }
+                        # use +/- 50 seconds around peak
+                        secs <- 50
+                        ileft <- peak - 0:(secs * 20)
+                        iright <- peak + 0:(secs * 20)
+                        iboth <- c(rev(ileft[-1]), iright)
+                        sign_peak <- sign(y[peak])
+                        drange <- diff(range(y[iboth]))
+                        # find peaks
+                        dc <- diff(y[iboth])
+                        ddc <- abs(diff(sign(dc)))
+                        ip <- iboth[which(ddc > 0) + 1]
+                        if (length(ip) == 0) {
+                            ip <- iboth
+                        }
+                        # plot(iboth, y[iboth], type = 'l')
+                        # peakness
+                        # select sub window of 15 seconds
+                        subsecs <- 15
+                        subwts <- bmnutall(subsecs * 20) / 2
+                        subleft <- peak - 0:(subsecs * 20)
+                        subright <- peak + 0:(subsecs * 20)
+                        subboth <- c(rev(subleft[-1]), subright)
+                        subrange <- diff(range(y[subboth]))
+                        peakness <- sum(
+                                        diff(y[subleft]) / subrange * subwts, 
+                                        diff(y[subright]) / subrange * subwts
+                                    ) * sign_peak * -1
+                        # symmetry
+                        wts <- bmnutall(length(subleft))
+                        # symmetry <- 1 - sqrt(sum(abs(y[subleft] - y[subright]))) /
+                        #     sqrt(drange * subsecs * 20 / 2)
+                        symmetry <- 1 - 
+                            mean(abs(y[subleft] - y[subright])) / drange
+                            # sum(abs(y[subleft] - y[subright]) * wts) / sum(wts) / drange
+                        # distinctness
+                        # use subrange
+                        wts <- bmnutall(length(subleft))
+                        distinctness <- sqrt(
+                            mean(
+                                sum(abs(y[peak] - y[subleft]) * wts) / sum(wts) / drange,
+                                sum(abs(y[peak] - y[subright]) * wts) / sum(wts) / drange
+                            )
+                        )
+                        plot(iboth, y[iboth], type = 'l')
+                        points(peak, y[peak], pch = 20, col = 'indianred')
+                        lines(subboth, y[subboth], col = 'lightblue')
+                        legend('bottomright', sprintf('%s = %1.2f',
+                                c('peakness', 'symmetry', 'distinctness'),
+                                c(peakness, symmetry, distinctness)),
+                            bty = 'n'
+                            )
+                    }
+
 					# covariance function's standard deviation and mean values left and right of fix lag
 					# ------------------------------------------------------------------------
 					# not implemented...
