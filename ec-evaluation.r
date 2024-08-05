@@ -973,6 +973,17 @@ ec_ht8700 <- function(
         names(Cospec_fix_Out) <- names(Cospec_dyn_Out) <- names(Covars_Out) <- names(Ogive_fix_Out) <- names(Ogive_dyn_Out) <- files$dates
     }
 
+    # Blackman-Nuttall (from minidoas)
+    BmNuttall <- function(n){
+      N <- n - 1
+      x <- 0.3635819 - 
+        0.4891775 * cos(2 * pi * seq.int(0, N) / N) + 
+        0.1365995 * cos(4 * pi * seq.int(0, N) / N) - 
+        0.0106411 * cos(6 * pi * seq.int(0, N) / N)
+      x / sum(x)
+    }
+
+
     cat("\n************************************************************\n")
     cat("HT8700 EC evaluation\n")
     cat("************************************************************\n")
@@ -1210,6 +1221,97 @@ ec_ht8700 <- function(
                 # covariance function's standard deviation and mean values left and right of fix lag
                 # ------------------------------------------------------------------------
                 # not implemented...
+
+                x11()
+                par(mfrow = c(2, 2))
+                window_width <- 100
+                # window_width <- 200
+                for (what in covariances) {
+                    # what <- 'wxnh3_ppb'
+                    # what <- 'wxT'
+                    # what <- 'uxw'
+                    xx <- Covars[[what]]
+                    dimax <- dyn_lag_max[1, what]
+                    is_positive <- xx[dimax] > 0
+                    ind <- dimax + seq(-1000, 1000)
+                    ileft <- dimax + seq(-1, -1000)
+                    iright <- dimax + seq(1, 1000)
+                    # plot(xx[ind], type = 'l')
+                    # points(1001, xx[dimax], col = 'red', pch = 20)
+
+                    # smooth cov function
+                    yy <- filter(xx, BmNuttall(window_width), method = 'convolution')
+
+                    # symmetry
+                    sym_val <- sum(abs(yy[ileft] - yy[iright]))
+                    drange <- diff(range(yy[ind]))
+                    sym_min <- 0
+                    sym_max <- length(ileft) * drange
+                    # linear scale
+                    sym_score <- 1 - sym_val / sym_max
+                    # sym_score <- 1 - (sym_val / sym_max) ^ (1 / 3)
+
+                    # find left and right turning point
+                    if (is_positive) {
+                        il <- which(sign(diff(yy[ileft])) > 0) + 1
+                        ir <- which(sign(diff(yy[iright])) > 0) + 1
+                    } else {
+                        il <- which(sign(diff(yy[ileft])) < 0) + 1
+                        ir <- which(sign(diff(yy[iright])) < 0) + 1
+                    }
+                    # plot(yy[ileft])
+                    il <- il[il > 20]
+                    # points(il[1], yy[ileft][il[1]], pch = 20, col = 'red')
+                    # plot(yy[iright])
+                    ir <- ir[ir > 20]
+                    # points(ir[1], yy[iright][ir[1]], pch = 20, col = 'red')
+                    # get peak height
+                    lturn <- yy[ileft[il[1]]]
+                    rturn <- yy[iright[ir[1]]]
+                    lpeak <- yy[dimax] - lturn
+                    rpeak <- yy[dimax] - rturn
+                    # dpeak <- (lpeak + rpeak) / 2
+                    # # get peak width
+                    # bpeak <- il[1] + ir[1]
+
+                    # peakedness
+                    scl <- 500 / drange
+                    peak_val <- (atan2(lpeak, il[1] / scl) + atan2(rpeak, ir[1] / scl)) / 2
+                    # peak_max <- atan2(dpeak, 1 / scl) 
+                    if (is_positive) {
+                        peak_max <- max(atan2(lpeak, 1 / scl), atan2(rpeak, 1 / scl))
+                    } else {
+                        peak_max <- min(atan2(lpeak, 1 / scl), atan2(rpeak, 1 / scl))
+                    }
+                    # peak_min <- atan2(-max(lpeak, rpeak), length(ileft) / scl) * 2
+                    peak_min <- -peak_max
+                    # linear scale
+                    # peak_score <- 1 - ((peak_max - peak_val) / (peak_max - peak_min)) ^ 2
+                    peak_score <- 1 - (peak_max - peak_val) / (peak_max - peak_min)
+
+
+                    # distinctness
+                    # dist_score <- (lpeak + rpeak)  / 2 / drange * ifelse(is_positive, 1, -1)
+                    dist_score <- sqrt((lpeak + rpeak)  / 2 / drange * ifelse(is_positive, 1, -1))
+                    # dist_score <- sqrt(min(abs(lpeak / drange), abs(rpeak / drange)))
+                    # dist_score <- lpeak / drange + rpeak / drange
+                    # dist_score <- sqrt(sqrt(dpeak / drange))
+
+                    plot(xx[ind], col = 'indianred', type = 'l', main = what)
+                    lines(yy[ind], col = 'blue', lwd = 2)
+                    lines(xx[ind], col = 'indianred')
+                    points(1000 - il[1], yy[ileft[il[1]]], pch = 20, col = 'red')
+                    points(1000 + ir[1], yy[iright[ir[1]]], pch = 20, col = 'red')
+                    pos <- if (sign(xx[dimax] < 0)) 'bottomleft' else 'topleft'
+                    legend(pos, bty = 'n', sprintf('%s = %1.2f',
+                            c('sym', 'peak', 'dist'), c(sym_score, peak_score, dist_score)))
+
+                }
+
+                ## hier bin ich!!! -> check scores
+
+                # browser()
+
 
                 # covariance function values +/- tau.off.sec of fix lag
                 # ------------------------------------------------------------------------
